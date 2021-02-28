@@ -16,7 +16,7 @@ a simple aplication using a frontend UI on a browser aimed to check communicatio
 >     $ pip install -e ./
 
 4. Run:
->     $ (. ${VIRTENV_ROOT}/bin/activate ; pyjamapeolple &)
+>     $ (. ${VIRTENV_ROOT}/bin/activate ; rs485_master &)
 >     $ chromium http://127.0.0.1:8000/ &
 >     $ firefox http://127.0.0.1:8000/ &
 
