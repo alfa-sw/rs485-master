@@ -1,10 +1,6 @@
-# Pyjamapeolple
+# rs485 Master
 
-a simple but fully featured example of how to use **tornado**, **asyncio** and **websocket** together 
-to build an application delegating the frontend UI to a browser, local or remote,
-without the limits of the http dialog.
-
-TAGS: tornado asyncio websocket 
+a simple aplication using a frontend UI on a browser aimed to check communication on a rs485 field bus.
 
 1. create a virtualenv 
 >     $ export VIRTENV_ROOT=desired-virtenv_root-path
@@ -12,7 +8,7 @@ TAGS: tornado asyncio websocket
 >     $ virtualenv -p /usr/bin/python3 ${VIRTENV_ROOT}
 
 2. clone this project in ${PROJECT_ROOT}
->     $ git clone git@github.com:giovanni-angeli/pyjamapeople.git
+>     $ git clone git@github.com:alfa-sw/rs485-master.git
 
 3. build Install in edit mode:
 >     $ . ${VIRTENV_ROOT}/bin/activate
@@ -24,5 +20,5 @@ TAGS: tornado asyncio websocket
 >     $ chromium http://127.0.0.1:8000/ &
 >     $ firefox http://127.0.0.1:8000/ &
 
-![Screenshot](doc/Screenshot_2021-01-30_14-58-59.png)#
+
 
