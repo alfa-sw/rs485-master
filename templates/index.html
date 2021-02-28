@@ -49,7 +49,17 @@
             <input type="submit" id="close_btn" value="close" onclick="close_btn_clicked();" disabled="true"/>
         </div>
         <br></br>
+        <div id="connect_container">
+            <p>
+                Device name of serial interface:
+                <input type="text" id="device_name" value="/dev/ttyUSB0"/>
+                Baudrate:
+                <input type="text" id="device_baud" value="115000"/>   
+                <input type="submit" id="connect_btn" value="connect" onclick="connect_btn_clicked();" />
+            </p>            
+        </div>
         <div id="message_container">
+            Text to send on serial interface:
             <input type="text" id="message" value="Hot meat!"/>
             <input type="submit" id="send_btn" value="send" onclick="send_btn_clicked();" disabled="true"/>
         </div>
@@ -59,7 +69,7 @@
         <div id="pushed_data_container">
         </div>    
         <small id="footer">{{ footer }}</small>
-        <div id="logger_area_container" hidden>
+        <div id="logger_area_container">
             <textarea id="logger_area" maxlength="50" rows="20" cols="100">
             </textarea>
         </div>    
@@ -102,11 +112,32 @@
                 logging("err:" + err);
             }
         }
+
+        var send_command = function (command_name, arguments) {
+            var msg_ = {
+               "command_name": command_name,
+               "arguments": arguments
+            };
+            msg_json = JSON.stringify(msg_);
+
+            logging("sending message to ws: '" + msg_json + "'");
+            ws_instance.send(msg_json);
+        }
+  
+        var connect_btn_clicked = function () {
+            send_command("connect", {
+                "device_name": document.getElementById("device_name").value,
+                "device_baud": document.getElementById("device_baud").value
+            });
+        }
+        
+                
         var send_btn_clicked = function () {
             var msg_ = document.getElementById("message").value;
             logging("sending message to ws: '" + msg_ + "'");
             ws_instance.send(msg_);
         }
+        
         var on_ws_error = function (evt) {
             logging("error: " + evt.data);
             alert("error: " + evt.data);
@@ -125,9 +156,8 @@
         }
         var on_ws_message = function (evt) {
             try {
-                var data = JSON.parse(evt.data);            
-                eval(data.js);
-
+                var data = evt.data;
+                logging("recv message:" + data);
             } catch(err) {
                 logging("err:" + err);
             }
@@ -135,6 +165,11 @@
 
         var init = function () {
              open_btn_clicked();
+             var rs485_status = rs485_reset_status;
+        }
+
+        var rs485_reset_status = {
+            "connected": false,
         }
 
         init();
