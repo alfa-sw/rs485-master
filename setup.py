@@ -20,7 +20,7 @@ with open(os.path.join(here, '__version__'), encoding='utf-8') as f:
 with open(os.path.join(here, 'README.md'), encoding='utf-8') as f:
     __readme__ = f.read().strip()
 
-__app_name__ = 'pyjamampeople'
+__app_name__ = 'rs485_master'
 
 def main():
     setup(
@@ -45,7 +45,7 @@ def main():
         ],
         include_package_data=True,
         scripts=[
-            'bin/pyjamampeople',
+            'bin/rs485_master',
         ],
         install_requires=[
             'tornado',
