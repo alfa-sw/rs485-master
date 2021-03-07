@@ -79,7 +79,7 @@ class WebsockHandler(tornado.websocket.WebSocketHandler):
             }
             self.write_message(answ)
         
-        self.RS485_instance.set_feedback_callback(callback)
+        self.RS485_instance.set_callback(callback)
 
 
     def open(self, *args, **kwargs):
@@ -126,7 +126,6 @@ class WebsockHandler(tornado.websocket.WebSocketHandler):
         inst = self.RS485_instance
         return commands_[command_name](inst, **cmd_args)
 
-
 class rs485_Master:
     """ A class to communicate to a serial port using asyncio coroutines.
     
@@ -142,7 +141,7 @@ class rs485_Master:
      START -> 'wait_init' -> 'connected' -> 'disconnected' -> END
     
     Every time the main task wants to communicate something to 
-    the client class the method defined as send_feedback attribute
+    the client class the method defined as _send_back attribute
     is fired. This happens when:
      - the status changes;
      - a new bunch of data arrives from serial.
@@ -165,8 +164,8 @@ class rs485_Master:
         Send a line of text to serial.
         Return boolean.
     
-    set_feedback_callback(function)
-        Set the feedback callback function. It shall have
+    set_callback(function)
+        Set the callback function. It shall have
         two arguments: 
         - signal: the name of signal, e.g. 'recv_from_serial'
         - content: the attached data, e.g. the received text
@@ -212,23 +211,23 @@ class rs485_Master:
         self._write_queue.put_nowait(kwargs['text'])
         return True
         
-    def set_feedback_callback(self, fct):
-        self._send_feedback = fct
+    def set_callback(self, fct):
+        self._send_back = fct
 
     def _set_status(self, current):
         self._current_status = current
         logging.info("set status to " + current)
         try:
-            self._send_feedback('status', current)
+            self._send_back('status', current)
         except:
-            logging.info("unable to send feedback")
+            logging.info("unable to send back")
             
     async def _run(self):
         conn_params = await self._connect_parameters.get()
         
         serial = aioserial.AioSerial(
           port = conn_params['device_name'],
-          baudrate = 9600)
+          baudrate = conn_params['device_baudrate'])
         
         self._set_status('connected')
         
@@ -237,7 +236,7 @@ class rs485_Master:
             while True:
                 text = await serial.read_until_async(aioserial.LF)
                 logging.info("Recv text:" + text.decode("utf-8"))
-                self._send_feedback('recv_from_serial', text.decode("utf-8"))
+                self._send_back('recv_from_serial', text.decode("utf-8"))
 
         async def write():
             while True:
