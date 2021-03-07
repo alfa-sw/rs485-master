@@ -128,85 +128,129 @@ class WebsockHandler(tornado.websocket.WebSocketHandler):
 
 
 class rs485_Master:
-   
-    def start_backend_task(self):
+    """ A class to communicate to a serial port using asyncio coroutines.
+    
+    After configuring serial parameters (using method connect)
+    the class establish a connection to a serial port, then stays 
+    listening either to serial port, routing bytes by means
+    of a callback function, either to the requests from another class: 
+    write data, disconnect and so on. We call it the "client class".
+    During initialization _run() is executed as a new asyncio task
+    and remains alive for the lifetime of the instance. During the
+    execution the status attribute changes:
+     
+     START -> 'wait_init' -> 'connected' -> 'disconnected' -> END
+    
+    Every time the main task wants to communicate something to 
+    the client class the method defined as send_feedback attribute
+    is fired. This happens when:
+     - the status changes;
+     - a new bunch of data arrives from serial.
+     
+    A set of methods allows the task to evolve by means of
+    asyncio syncronization primitives.
+    
+    Methods
+    -------
+    connect(device_name=string, device_baudrate=int)
+        Define serial connection parameters
+        Returns True if the request is successful
+        but client should check the status value to change too.
 
-        logging.info("starting backend task...")
+    disconnect()
+        Disconnect and let the task die.
+        Return boolean.
 
-        _future = self.run()
-        asyncio.ensure_future(_future)
+    send_on_serial(text=string)
+        Send a line of text to serial.
+        Return boolean.
+    
+    set_feedback_callback(function)
+        Set the feedback callback function. It shall have
+        two arguments: 
+        - signal: the name of signal, e.g. 'recv_from_serial'
+        - content: the attached data, e.g. the received text
         
+    """
+          
     def __init__(self):
         logging.info("RS485_Master init ...")
         
-        self.connect_parameters = asyncio.Queue(maxsize=1)
+        self._connect_parameters = asyncio.Queue(maxsize=1)
         
-        self.disconnect_event = asyncio.Event()
-        self.write_queue = asyncio.Queue()
-        self.set_status('wait_init')
+        self._disconnect_event = asyncio.Event()
+        self._write_queue = asyncio.Queue()
+        self._set_status('wait_init')
         
-        self.start_backend_task()
+        self._start_backend_task()
 
     def __del__(self):
         self.disconnect()
 
+    def _start_backend_task(self):
+
+        logging.info("starting backend task...")
+
+        _future = self._run()
+        asyncio.ensure_future(_future)
+
     def connect(self, *args, **kwargs):
-        if self.current_status != 'wait_init':
+        if self._current_status != 'wait_init':
             return False
         
-        self.connect_parameters.put_nowait(kwargs)
+        self._connect_parameters.put_nowait(kwargs)
         return True
 
     def disconnect(self, *args, **kwargs):
-        if self.current_status != 'connected':
+        if self._current_status != 'connected':
             return False
             
-        self.disconnect_event.set()
+        self._disconnect_event.set()
         return True
 
     def send_on_serial(self, *args, **kwargs):
-        self.write_queue.put_nowait(kwargs['text'])
+        self._write_queue.put_nowait(kwargs['text'])
         return True
         
     def set_feedback_callback(self, fct):
-        self.send_feedback = fct
+        self._send_feedback = fct
 
-    def set_status(self, current):
-        self.current_status = current
+    def _set_status(self, current):
+        self._current_status = current
         logging.info("set status to " + current)
         try:
-            self.send_feedback('status', current)
+            self._send_feedback('status', current)
         except:
             logging.info("unable to send feedback")
             
-    async def run(self):
-        conn_params = await self.connect_parameters.get()
+    async def _run(self):
+        conn_params = await self._connect_parameters.get()
         
         serial = aioserial.AioSerial(
           port = conn_params['device_name'],
           baudrate = 9600)
         
-        self.set_status('connected')
+        self._set_status('connected')
         
         async def read():
             logging.info("starting read")
             while True:
                 text = await serial.read_until_async(aioserial.LF)
                 logging.info("Recv text:" + text.decode("utf-8"))
-                self.send_feedback('recv_from_serial', text.decode("utf-8"))
+                self._send_feedback('recv_from_serial', text.decode("utf-8"))
 
         async def write():
             while True:
-                text = await self.write_queue.get()
+                text = await self._write_queue.get()
                 logging.info("Send text:" + text)
                 await serial.write_async(text.encode('utf-8') + b'\n')
                 
         read_task = asyncio.ensure_future(read())
         write_task = asyncio.ensure_future(write())
 
-        await self.disconnect_event.wait()
+        await self._disconnect_event.wait()
         serial.close()
-        self.set_status('disconnected')
+        self._set_status('disconnected')
         
 class Application:
 
