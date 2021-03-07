@@ -54,21 +54,28 @@
                 Device name of serial interface:
                 <input type="text" id="device_name" value="/dev/ttyUSB0"/>
                 Baudrate:
-                <input type="text" id="device_baud" value="115000"/>   
+                <input type="text" id="device_baudrate" value="9600"/>   
                 <input type="submit" id="connect_btn" value="connect" onclick="connect_btn_clicked();" />
-            </p>            
+                <input type="submit" id="disconnect_btn" value="disconnect" onclick="disconnect_btn_clicked();" />                
+            </p>
         </div>
         <div id="message_container">
             Text to send on serial interface:
             <input type="text" id="message" value="Hot meat!"/>
-            <input type="submit" id="send_btn" value="send" onclick="send_btn_clicked();" disabled="true"/>
+            <input type="submit" id="send_btn" value="send to serial" onclick="send_btn_clicked();" disabled="true"/>
         </div>
+
         <div id="answer_target">***</div>
         <br></br>
         <div id="heartbeat_target">***</div>
         <div id="pushed_data_container">
         </div>    
         <small id="footer">{{ footer }}</small>
+        <hr> 
+        <b>Debug stuff</b>
+        <div id="status_target">***</div>
+        <div id="last_answer_target">***Serial Receive buffer ***</div>
+
         <div id="logger_area_container">
             <textarea id="logger_area" maxlength="50" rows="20" cols="100">
             </textarea>
@@ -127,15 +134,18 @@
         var connect_btn_clicked = function () {
             send_command("connect", {
                 "device_name": document.getElementById("device_name").value,
-                "device_baud": document.getElementById("device_baud").value
+                "device_baud": document.getElementById("device_baudrate").value
             });
+        }
+        var disconnect_btn_clicked = function () {
+            send_command("disconnect", {});
         }
         
                 
         var send_btn_clicked = function () {
-            var msg_ = document.getElementById("message").value;
-            logging("sending message to ws: '" + msg_ + "'");
-            ws_instance.send(msg_);
+            send_command("send_on_serial", {
+                "text": document.getElementById("message").value
+            });
         }
         
         var on_ws_error = function (evt) {
@@ -145,19 +155,48 @@
         var on_ws_open = function (evt) {
             logging("* ws connection open *");
             document.getElementById("open_btn").disabled = true; 
-            document.getElementById("send_btn").disabled = false; 
+            document.getElementById("send_btn").disabled = true; 
             document.getElementById("close_btn").disabled = false; 
+            document.getElementById("connect_btn").disabled = false;
+            document.getElementById("disconnect_btn").disabled = true;            
         }
         var on_ws_close = function (evt) {
             logging("* ws connection closed *");
             document.getElementById("open_btn").disabled = false; 
             document.getElementById("send_btn").disabled = true; 
-            document.getElementById("close_btn").disabled = true; 
+            document.getElementById("close_btn").disabled = true;
+            document.getElementById("connect_btn").disabled = true;
+            document.getElementById("disconnect_btn").disabled = true;            
         }
         var on_ws_message = function (evt) {
             try {
-                var data = evt.data;
-                logging("recv message:" + data);
+                logging("recv message:" + evt.data);
+                var data = JSON.parse(evt.data);
+                if (data.answer != undefined) {
+                    document.getElementById("last_answer_target").innerHTML = "answer to last command (" + data.answer + "):" +
+                     (data.content ? "OK" : "FAIL");
+                } else if (data.signal != undefined) {
+                    switch(data.signal) {
+                    case "status":
+                        document.getElementById("status_target").innerHTML = "current status:" + data.content;
+                        if (data.content == "connected") {
+                            document.getElementById("send_btn").disabled = false;                        
+                            document.getElementById("connect_btn").disabled = true;
+                            document.getElementById("disconnect_btn").disabled = false;
+                        } else if (data.content == "disconnected") {
+                            document.getElementById("send_btn").disabled = true;                        
+                            document.getElementById("connect_btn").disabled = true;
+                            document.getElementById("disconnect_btn").disabled = true;                        
+                        }
+                        break;
+                    
+                    case "recv_from_serial":
+                        var _ = document.getElementById("heartbeat_target");
+                        _.innerHTML += "<br>" + "<b>" + data.timestamp + "</b>:" + data.content;
+                        break;
+                    }                    
+                }
+                
             } catch(err) {
                 logging("err:" + err);
             }
