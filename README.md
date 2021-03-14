@@ -18,10 +18,23 @@ a simple aplication using a frontend UI on a browser aimed to check communicatio
 >     $ pip install -e ./
 
 4. Run:
->     $ (. ${VIRTENV_ROOT}/bin/activate ; rs485_master &)
+>     $ (. ${VIRTENV_ROOT}/bin/activate ; python3 src/rs485_master &)
 >     $ chromium http://127.0.0.1:8000/ &
 >     $ firefox http://127.0.0.1:8000/ &
 
+### Notes
+You should adjust file permissions of the device file of serial port. On most systems
+just add user to group dialout:
+
+```
+sudo usermod -a -G dialout $USER
+```
+
+On Raspberry, execute `sudo raspi-config` and disable login shell on *Interfacing options*.
+After reboot the serial port /dev/ttyAMA0 is available to user pi.
+
+In order to connect from any LAN client change variable `LISTEN_ADDRESS` to `''` in the
+source file rs485_master.py.
 
 ## Communication between browser and backend
 
