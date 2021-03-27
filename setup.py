@@ -49,7 +49,8 @@ def main():
         ],
         install_requires=[
             'tornado',
-            'aioserial'
+            'aioserial',
+            'aiofiles'
         ],
     )
 
