@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from context import FileDriver
 import asyncio
 import os
@@ -19,12 +21,12 @@ class TestFileDriver(unittest.IsolatedAsyncioTestCase):
     async def test_connect(self):
         def observe_general(ev):
             print("Event: {k}, Attachment: {v} Source: {s}"
-              .format(k = ev.event, v = ev.attachment, s = ev.source))
+              .format(k = ev.label, v = ev.attachment, s = ev.source))
 
         def generate_observe_read():
             reads = []
             def observe_read(ev):
-                if ev.event == FileDriver.Event.PACKET_RECV:
+                if ev.label == FileDriver.EventLabel.PACKET_RECV:
                     reads.append(ev.attachment['text'])
             return (reads, observe_read)
 
@@ -40,14 +42,13 @@ class TestFileDriver(unittest.IsolatedAsyncioTestCase):
         endpoint_A.connect(port_rx = self.fifo_in, port_tx = self.fifo_out)
         endpoint_B.connect(port_rx = self.fifo_out, port_tx = self.fifo_in)
         
-        endpoint_A.write("test")
+        endpoint_A.write(b"test")
         await asyncio.sleep(1)
         
         assert(len(reads) == 1)
-        assert(reads[0] == 'test')
+        assert(reads[0] == (b'test' + FileDriver.DELIMITER_CODE))
  
            
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
     unittest.main()
-    print("EC")

@@ -1,3 +1,13 @@
+""" Implements low-level API to communication device.
+
+Any class derived from AbstractDriver can be used 
+from higher-level API to connect to the device and
+make asyncronous read / write a packet, that is the array
+of bytes between a starting and ending delimiter.
+
+The class make use of the event handling system implemented
+by class Observable. """
+
 import logging
 import traceback
 
@@ -10,31 +20,63 @@ import aiofiles
 from enum import Enum, auto
 
 class Event(object):
+    source = None
+    label = None
+    attachment = None
     pass
 
-class Observable(object):
+class Observable(abc.ABC):
+    """ The virtual class implementing the event system,
+    following the publish-subscribe pattern.
+    Any instance of this class publish messages, which are
+    sent to receiving objects previously subscribed. 
+    Each instance of this class stores a list 
+    of callbacks. When an event is fired by the instance,
+    each callback is called with event data as argument
+    """
+
     def __init__(self):
         self.callbacks = []
         
     def subscribe(self, callback):
+        """
+        add the callback defined as argument. 
+        :param callback: Callback shall have 1 positional argument:
+            def callback(e), where 'e' is an instance of class Event. 
+        """
+
         self.callbacks.append(callback)
         
-    def fire(self, event, **attrs):
+    def fire(self, event_label, **attrs):
+        """
+        add the callback defined as argument. 
+        :param callback: Callback shall have 1 positional argument:
+            def callback(e), where 'e' is an instance of class Event. 
+        """
         e = Event()
         e.source = self
-        e.event = event
+        e.label = event_label
         e.attachment = attrs
         for k, v in attrs.items():
             setattr(e, k, v)
         for fn in self.callbacks:
             fn(e)
 
-class AbstractDriver(abc.ABC, Observable):
+class AbstractDriver(Observable):
+    """ The virtual class implementing the abstract driver.
+    Concrete drivers are derived from this class.
+    There are two types of events that can be fired:
+    - STATE_CHANGED: from CONNECTED (e['state']) to DISCONNECTED and viceversa
+    - PACKET_RECV: a packet (e['text']) is received
+    """
+   
+    DELIMITER_CODE =  b'\x03'
+
     class State(Enum):
         CONNECTED = auto()
         DISCONNECTED = auto()
 
-    class Event(Enum):
+    class EventLabel(Enum):
         PACKET_RECV = auto()
         STATE_CHANGED = auto()
         
@@ -50,27 +92,34 @@ class AbstractDriver(abc.ABC, Observable):
 
     @abc.abstractmethod
     def connect(self, **connection_parameters):
-        """ Implement me! """
+        """ Connect to device. If succeed the event STATE_CHANGED is fired.
+        : param **connection_parameters: a dictionary with 
+        the connection parameters. Please note that dict keys
+        is expected to vary depending on the concrete class.
+        """
         pass
 
     @abc.abstractmethod
     def disconnect(self):
-        """ Implement me! """
+        """ Disconnect to device. If succeed the event STATE_CHANGED is fired. """
         pass
 
     @abc.abstractmethod
     def write(self, text):
-        """ Implement me! """
+        """ Write a packet.
+        : param text: a binary array to send, excluding the end delimiter.
+        """
         pass
 
     def get_current_status(self):
+        """ Get the current status. """
         return self.status
 
     def _set_current_status(self, state):
         self.state = state
-        self.fire(AbstractDriver.Event.STATE_CHANGED, state = state)
+        self.fire(AbstractDriver.EventLabel.STATE_CHANGED, state = state)
         
-class FileDriver(AbstractDriver):      
+class FileDriver(AbstractDriver): 
     def __init__(self):
         logging.info("RS485_Master init ...")
         self._disconnect_event = asyncio.Event()
@@ -91,7 +140,7 @@ class FileDriver(AbstractDriver):
             raise
             
     def disconnect(self):
-        logging.info("Disconnect--")
+        logging.info("disconnecting")
         try:
             self._disconnect_event.set()
             self._set_current_status(self.State.DISCONNECTED)
@@ -100,22 +149,27 @@ class FileDriver(AbstractDriver):
             raise
                        
     def write(self, text):
-        self._write_queue.put_nowait(text.encode('utf-8') + b'\n')
+        self._write_queue.put_nowait(bytes(text))
 
-    async def _run(self):
-        logging.info("starting read")
-        
+    async def _run(self):       
         async def read_task():
+            logging.info("starting read")
             async with aiofiles.open(self.params["port_rx"], mode="rb", buffering=0) as f:
                 try:
                     while True:
                         buffer = b''
                         b = b''
-                        while b != b'\n':
-                            buffer = buffer + b 
+                        while b != self.DELIMITER_CODE:
                             b = await f.read(1)
+                            if b == b'': # EOF reached
+                               # sleep because after EOF read(1) starts to
+                               # return immediately
+                               await asyncio.sleep(0.1)
+                            else:
+                               buffer = buffer + b 
+                               
                         logging.info("Recv text:" + buffer.decode("utf-8"))
-                        self.fire(self.Event.PACKET_RECV, text = buffer.decode("utf-8"))
+                        self.fire(self.EventLabel.PACKET_RECV, text = buffer)
                 except asyncio.CancelledError:
                        logging.info('reading task cancelled')
                     
@@ -123,7 +177,7 @@ class FileDriver(AbstractDriver):
             async with aiofiles.open(self.params["port_tx"], mode="wb", buffering=0) as f:
                 text = await self._write_queue.get()
                 logging.info("Send text:" + str(text))
-                await f.write(text + b'\n')
+                await f.write(text + self.DELIMITER_CODE)
             
         read_task = asyncio.ensure_future(read_task())
         write_task = asyncio.ensure_future(write_task())
