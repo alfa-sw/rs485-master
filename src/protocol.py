@@ -7,7 +7,31 @@
 # pylint: disable=too-many-lines
 
 
-class MAB_MGB_protocol:
+from enum import Enum, auto
+from observable import Observable
+from driver import AbstractDriver
+
+class Packet:
+    """ this class represents a Datagram """
+    
+    addr: None
+    cmd_code: None
+    payload_bytes: None
+
+    def __init__(self, addr, cmd_code, payload_bytes):
+        self.addr = addr
+        self.cmd_code = cmd_code
+        self.payload_bytes = payload_bytes
+
+    def get_as_tuple(self):
+        """ return a tuple (addr, cmd_code, payload_bytes) """
+        return (self.addr, self.cmd_code, self.payload_bytes)
+
+    def __str__(self):
+        return "Packet addr:{a} cmd_code:{c}, payload:{p}".format(
+          a = self.addr, c = self.cmd_code, p = self.payload_bytes)
+
+class Packer:
 
     """ here we encapsulate the stuff related to the serial (low level) comm-protocol between MAB and MGB
 
@@ -129,11 +153,11 @@ class MAB_MGB_protocol:
             else:
                 stuffed_buff_list.append(byte_)
 
-        return bytes(stuffed_buff_list)
+        return stuffed_buff_list
 
     def decode_msg(self, packet_bytes):
         """ takes in input a full sequence of bytes (as coming from serial port) coding for a full packet and
-        returns: (addr, cmd_code, decoded_payload_bytes) """
+        returns: Packet object """
 
         if packet_bytes[0] != self.ASCII_STX or packet_bytes[-1] != self.ASCII_ETX or len(packet_bytes) < 8:
             raise ValueError('illegal packet:{}'.format(" ".join(["0x%0X" % int(b) for b in packet_bytes])))
@@ -163,30 +187,30 @@ class MAB_MGB_protocol:
         cmd_code = decoded_payload_bytes[0]
         _payload_bytes = decoded_payload_bytes[1:]
 
-        return (addr, cmd_code, _payload_bytes)
+        return Packet(addr, cmd_code, _payload_bytes)
 
-    def encode_msg(self, addr, cmd_code, payload_bytes):
-        """ takes in input (addr, cmd_code, payload_bytes_to_be_encoded)
+    def encode_msg(self, packet):
+        """ takes in input a Packet object
         returns a full packet of bytes ready to be sent to serial port.  """
+
+        (addr, cmd_code, payload_bytes) = packet.get_as_tuple()
 
         payload_list = [cmd_code, ]
         payload_list += list(payload_bytes)
 
-        ext_payload_bytes = bytes(payload_list)
-
-        if len(ext_payload_bytes) > (256 - 20 - 8):
+        if len(payload_list) > (256 - 20 - 8):
             raise ValueError("payload's length {} is out of range. payload:{}".format(
                 len(ext_payload_bytes), ["0x%02X" % int(b) for b in ext_payload_bytes]))
 
         packet_list = []
 
-        stuffed_payload_bytes = self._stuff_buffer(ext_payload_bytes)
+        stuffed_payload_bytes = self._stuff_buffer(payload_list)
         pack_len = len(stuffed_payload_bytes)
 
         packet_list += [self.ASCII_STX, ]
         packet_list += [addr + 0x20, ]
         packet_list += [pack_len + 8 + 0x20, ]
-        packet_list += [stuffed_payload_bytes]
+        packet_list += stuffed_payload_bytes
 
         pack_crc = self._crc16(bytes(packet_list), 0)
         # ~ in python2 function 'bytes()' is an alias for 'str()' so, has its idiosyncrasies
