@@ -28,8 +28,9 @@ class AbstractDriver(Observable):
     - PACKET_RECV: a packet (e['text']) is received
     """
    
-    DELIMITER_CODE =  b'\x03'
-
+    DELIMITER_START_CODE =  b'\x02'
+    DELIMITER_END_CODE =  b'\x03'
+    
     class State(Enum):
         CONNECTED = auto()
         DISCONNECTED = auto()
@@ -69,11 +70,11 @@ class AbstractDriver(Observable):
         """
         pass
 
-    def get_current_status(self):
-        """ Get the current status. """
-        return self.status
+    def get_current_state(self):
+        """ Get the current state. """
+        return self.state
 
-    def _set_current_status(self, state):
+    def _set_current_state(self, state):
         self.state = state
         self.fire(AbstractDriver.EventLabel.STATE_CHANGED, state = state)
         
@@ -92,7 +93,7 @@ class FileDriver(AbstractDriver):
         try:
             self.params = connection_parameters
             asyncio.ensure_future(self._run())
-            self._set_current_status(self.State.CONNECTED)
+            self._set_current_state(self.State.CONNECTED)
         except:
             logging.info("Error while connecting:", sys.exc_info()[0])
             raise
@@ -101,7 +102,7 @@ class FileDriver(AbstractDriver):
         logging.info("disconnecting")
         try:
             self._disconnect_event.set()
-            self._set_current_status(self.State.DISCONNECTED)
+            self._set_current_state(self.State.DISCONNECTED)
         except:
             logging.info("Error while disconnecting:", sys.exc_info()[0])
             raise
@@ -117,8 +118,13 @@ class FileDriver(AbstractDriver):
                     while True:
                         buffer = b''
                         b = b''
-                        while b != self.DELIMITER_CODE:
+                        
+                        while b != self.DELIMITER_START_CODE:
                             b = await f.read(1)
+                        buffer = b
+                        while b != self.DELIMITER_END_CODE:
+                            b = await f.read(1)
+                                                          
                             if b == b'': # EOF reached
                                # sleep because after EOF read(1) starts to
                                # return immediately
@@ -135,7 +141,7 @@ class FileDriver(AbstractDriver):
             async with aiofiles.open(self.params["port_tx"], mode="wb", buffering=0) as f:
                 text = await self._write_queue.get()
                 logging.info("Send text:" + str(text))
-                await f.write(text + self.DELIMITER_CODE)
+                await f.write(text)
             
         read_task = asyncio.ensure_future(read_task())
         write_task = asyncio.ensure_future(write_task())
