@@ -18,7 +18,7 @@ class TestFileDriver(unittest.IsolatedAsyncioTestCase):
         os.remove(self.fifo_in)
         os.remove(self.fifo_out)
 
-    async def test_connect(self):
+    async def test_file_driver(self):
         def observe_general(ev):
             print("Event: {k}, Attachment: {v} Source: {s}"
               .format(k = ev.label, v = ev.attachment, s = ev.source))
@@ -42,12 +42,12 @@ class TestFileDriver(unittest.IsolatedAsyncioTestCase):
         endpoint_A.connect(port_rx = self.fifo_in, port_tx = self.fifo_out)
         endpoint_B.connect(port_rx = self.fifo_out, port_tx = self.fifo_in)
         
-        endpoint_A.write(b"test")
+        endpoint_A.write(b"\x02test\x03")
         await asyncio.sleep(1)
         
         assert(len(reads) == 1)
-        assert(reads[0] == (b'test' + FileDriver.DELIMITER_CODE))
- 
+        assert(reads[0] == b"\x02test\x03")
+
            
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
