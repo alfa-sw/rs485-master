@@ -6,6 +6,8 @@
 # pylint: disable=invalid-name
 # pylint: disable=too-many-lines
 
+import logging
+import abc
 
 from enum import Enum, auto
 from observable import Observable
@@ -224,3 +226,70 @@ class Packer:
         packet_bytes = bytes(packet_list)
 
         return packet_bytes
+
+
+class Protocol(Observable):
+    """ the class implementing the protocol itself. It handles user-level requests
+    and reports messages as events. It implements timing constraints, retransmission etc. 
+    
+    It uses the publish-subscribe event system by overriding Observable class.
+    
+    Events that can be fired:
+    - STATE_CHANGED: in case of change of class state
+      attachments: 'state': label of entering state (WAITING_FOR_DRIVER_CONNECTED/READY)
+    - PACKET_RECV: in case of receiving a Packet
+      attachments: 'packet': a Packet object representing the datagram.
+    """
+
+    class State(Enum):
+        WAITING_FOR_DRIVER_CONNECTED = auto()
+        READY = auto()
+
+    class EventLabel(Enum):
+        PACKET_RECV = auto()
+        STATE_CHANGED = auto()
+        ERROR = auto()
+        
+    def __init__(self, driver):
+        """ Init method.
+         :param driver: an object of type AbstractDriver used to transmit/receive data
+         
+        """
+        Observable.__init__(self)
+        if isinstance(driver, AbstractDriver) == False:
+            raise TypeError("Protocol object should be initialized with a subclass of AbstractDriver")
+
+        driver.subscribe(self._observe_driver)
+        self.driver = driver
+        
+        if driver.get_current_state() == AbstractDriver.State.CONNECTED:
+            self.state = self.State.READY
+        else:
+            self.state = self.State.WAITING_FOR_DRIVER_CONNECTED
+        
+    def get_current_state(self):
+        """ Get the current state. """
+        return self.state
+
+    def _set_current_state(self, state):
+        self.state = state
+        self.fire(self.EventLabel.STATE_CHANGED, state = state)
+        
+    def _observe_driver(self, ev):
+        logging.info("Event label: {k}, Attachment: {v} Source: {s}"
+          .format(k = ev.label, v = ev.attachment, s = ev.source))
+          
+        if ev.label == AbstractDriver.EventLabel.STATE_CHANGED:
+            if ev.attachment['state'] == AbstractDriver.State.CONNECTED:
+                self._set_current_state(self.State.READY)
+            else:
+                self._set_current_state(self.State.WAITING_FOR_DRIVER_CONNECTED)    
+        elif ev.label == AbstractDriver.EventLabel.PACKET_RECV:
+            bytes = ev.attachment['text']
+            packet = Packer().decode_msg(bytes)
+            self.fire(self.EventLabel.PACKET_RECV, packet = packet)
+            
+    def send_packet(self, packet):
+        """ Send a packet to driver. """
+        frame = Packer().encode_msg(packet)
+        self.driver.write(frame)
